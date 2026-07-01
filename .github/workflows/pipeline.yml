@@ -5,7 +5,9 @@ on:
     types: [deploy]
 
 env:
-  REGISTRY: private-zot.registry.svc.cluster.local:5000
+  # NodePort address — resolvable by kubelet on all nodes, configured as
+  # insecure HTTP mirror in /etc/rancher/k3s/registries.yaml on each node
+  REGISTRY: 192.168.0.45:30080
   APP: codejourney
 
 jobs:
@@ -39,10 +41,10 @@ jobs:
       - name: Build and push image to Zot
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
-          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" .
+          LATEST="${{ env.REGISTRY }}/${{ env.APP }}:latest"
+          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" -t "${LATEST}" .
           nerdctl --insecure-registry push "${IMAGE}"
-          nerdctl --insecure-registry tag "${IMAGE}" "${{ env.REGISTRY }}/${{ env.APP }}:latest"
-          nerdctl --insecure-registry push "${{ env.REGISTRY }}/${{ env.APP }}:latest"
+          nerdctl --insecure-registry push "${LATEST}"
 
       - name: Install kubectl
         run: |
