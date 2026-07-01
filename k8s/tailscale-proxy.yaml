@@ -87,6 +87,7 @@ spec:
         name: tailscale-state
       spec:
         accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
         resources:
           requests:
             storage: 100Mi

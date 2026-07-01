@@ -28,6 +28,8 @@ spec:
               value: "true"
             - name: NEXTAUTH_URL
               value: "https://codejourney.tail9d71dd.ts.net"
+            - name: API_URL
+              value: "http://codejourney-api.dev-testing.svc.cluster.local:4000"
             - name: AUTH_SECRET
               valueFrom:
                 secretKeyRef:

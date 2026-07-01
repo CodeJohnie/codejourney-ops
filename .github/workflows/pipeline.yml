@@ -9,6 +9,7 @@ env:
   # insecure HTTP mirror in /etc/rancher/k3s/registries.yaml on each node
   REGISTRY: 192.168.0.45:30080
   APP: codejourney
+  API_APP: codejourney-api
 
 jobs:
   build-and-deploy:
@@ -38,11 +39,19 @@ jobs:
           until buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers 2>/dev/null; do sleep 2; done
           echo "buildkitd ready"
 
-      - name: Build and push image to Zot
+      - name: Build and push web image to Zot
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
           LATEST="${{ env.REGISTRY }}/${{ env.APP }}:latest"
-          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" -t "${LATEST}" .
+          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" -t "${LATEST}" -f Dockerfile .
+          nerdctl --insecure-registry push "${IMAGE}"
+          nerdctl --insecure-registry push "${LATEST}"
+
+      - name: Build and push API image to Zot
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.API_APP }}:${{ github.event.client_payload.sha }}"
+          LATEST="${{ env.REGISTRY }}/${{ env.API_APP }}:latest"
+          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" -t "${LATEST}" -f Dockerfile.api .
           nerdctl --insecure-registry push "${IMAGE}"
           nerdctl --insecure-registry push "${LATEST}"
 
@@ -58,7 +67,12 @@ jobs:
           token: ${{ secrets.GHCR_TOKEN }}
           path: ops
 
-      - name: Substitute image and apply manifests
+      - name: Apply infrastructure (postgres, redis) — idempotent
+        run: |
+          kubectl apply -f ops/k8s/postgres.yaml
+          kubectl apply -f ops/k8s/redis.yaml
+
+      - name: Deploy web app
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
           if kubectl get deployment ${{ env.APP }} -n dev-testing &>/dev/null; then
@@ -67,3 +81,13 @@ jobs:
             sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml | kubectl apply -f -
           fi
           kubectl rollout status deployment/${{ env.APP }} -n dev-testing --timeout=120s
+
+      - name: Deploy API
+        run: |
+          API_IMAGE="${{ env.REGISTRY }}/${{ env.API_APP }}:${{ github.event.client_payload.sha }}"
+          if kubectl get deployment ${{ env.API_APP }} -n dev-testing &>/dev/null; then
+            kubectl set image deployment/${{ env.API_APP }} ${{ env.API_APP }}="${API_IMAGE}" -n dev-testing
+          else
+            sed "s|API_IMAGE_PLACEHOLDER|${API_IMAGE}|g" ops/k8s/api-deployment.yaml | kubectl apply -f -
+          fi
+          kubectl rollout status deployment/${{ env.API_APP }} -n dev-testing --timeout=120s
