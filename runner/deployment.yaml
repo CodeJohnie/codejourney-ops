@@ -14,8 +14,6 @@ spec:
         app: github-runner
     spec:
       serviceAccountName: github-runner
-      nodeSelector:
-        kubernetes.io/hostname: rpi-master
       volumes:
         - name: containerd-sock
           hostPath:
@@ -23,14 +21,6 @@ spec:
             type: Socket
         - name: buildkit-sock
           emptyDir: {}
-      initContainers:
-        # Wait for buildkitd to be ready before the runner starts
-        - name: wait-for-buildkit
-          image: moby/buildkit:master
-          command: ["sh", "-c", "until buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers 2>/dev/null; do sleep 2; done"]
-          volumeMounts:
-            - name: buildkit-sock
-              mountPath: /run/buildkit
       containers:
         - name: buildkitd
           image: moby/buildkit:master

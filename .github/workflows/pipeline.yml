@@ -30,6 +30,12 @@ jobs:
             | tar -xz -C /usr/local bin/buildctl
           buildctl --version
 
+      - name: Wait for buildkitd
+        run: |
+          echo "Waiting for buildkitd socket..."
+          until buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers 2>/dev/null; do sleep 2; done
+          echo "buildkitd ready"
+
       - name: Build and push image to Zot
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
