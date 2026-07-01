@@ -38,11 +38,11 @@ spec:
               value: repo
             - name: REPO_URL
               value: https://github.com/CodeJohnie/codejourney-ops
-            - name: GITHUB_PAT
+            - name: ACCESS_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: runner-secrets
-                  key: GITHUB_PAT
+                  key: ACCESS_TOKEN
             - name: RUNNER_NAME
               value: k3s-homelab
             - name: RUNNER_LABELS
