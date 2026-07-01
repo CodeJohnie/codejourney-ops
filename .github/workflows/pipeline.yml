@@ -1,0 +1,67 @@
+name: Deploy Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        required: true
+        type: string
+    secrets:
+      GHCR_TOKEN:
+        required: true
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout CodeJourney source
+        uses: actions/checkout@v4
+        with:
+          repository: CodeJohnie/CodeJourney
+          ref: ${{ inputs.sha }}
+          token: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: CodeJohnie
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker   # use local daemon — avoids BuildKit cache complexity on self-hosted
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/codejohnie/codejourney:${{ inputs.sha }}
+            ghcr.io/codejohnie/codejourney:latest
+
+      - name: Checkout ops repo (for k8s manifests)
+        uses: actions/checkout@v4
+        with:
+          repository: CodeJohnie/codejourney-ops
+          token: ${{ secrets.GHCR_TOKEN }}
+          path: ops
+
+      - name: Substitute image placeholder and apply manifests
+        run: |
+          IMAGE="ghcr.io/codejohnie/codejourney:${{ inputs.sha }}"
+          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml > /tmp/deployment-patched.yaml
+          kubectl apply -f ops/k8s/namespace.yaml
+          kubectl apply -f ops/k8s/sealed-secret.yaml
+          kubectl apply -f /tmp/deployment-patched.yaml
+          kubectl apply -f ops/k8s/service.yaml
+          kubectl apply -f ops/k8s/ingress-tailscale.yaml
+          kubectl apply -f ops/k8s/tailscale-proxy.yaml
+          kubectl rollout status deployment/codejourney -n dev-testing --timeout=120s

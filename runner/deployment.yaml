@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-runner
+  namespace: ci
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: github-runner
+  template:
+    metadata:
+      labels:
+        app: github-runner
+    spec:
+      serviceAccountName: github-runner
+      # Mount the host Docker socket so the runner can build images
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: kubeconfig
+          secret:
+            secretName: runner-kubeconfig
+      containers:
+        - name: runner
+          image: myoung34/github-runner:latest
+          env:
+            - name: RUNNER_SCOPE
+              value: repo
+            - name: REPO_URL
+              value: https://github.com/CodeJohnie/codejourney-ops
+            - name: RUNNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: runner-secrets
+                  key: RUNNER_TOKEN
+            - name: RUNNER_NAME
+              value: k3s-homelab
+            - name: RUNNER_LABELS
+              value: self-hosted,k3s
+            - name: EPHEMERAL
+              value: "false"
+            - name: DISABLE_AUTO_UPDATE
+              value: "true"
+            - name: KUBECONFIG
+              value: /home/runner/.kube/config
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            - name: kubeconfig
+              mountPath: /home/runner/.kube
+              readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+---
+# Secrets — apply manually with your actual values (see README)
+# kubectl create secret generic runner-secrets -n ci \
+#   --from-literal=RUNNER_TOKEN=<your-runner-token>
+#
+# kubectl create secret generic runner-kubeconfig -n ci \
+#   --from-file=config=<path-to-kubeconfig>
