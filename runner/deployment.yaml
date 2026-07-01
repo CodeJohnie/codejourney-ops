@@ -14,10 +14,14 @@ spec:
         app: github-runner
     spec:
       serviceAccountName: github-runner
+      # Pin to master node — containerd socket path is consistent here
+      nodeSelector:
+        kubernetes.io/hostname: rpi-master
       volumes:
-        - name: docker-sock
+        - name: containerd-sock
           hostPath:
-            path: /var/run/docker.sock
+            path: /run/k3s/containerd/containerd.sock
+            type: Socket
       containers:
         - name: runner
           image: myoung34/github-runner:latest
@@ -39,9 +43,13 @@ spec:
               value: "false"
             - name: DISABLE_AUTO_UPDATE
               value: "true"
+            - name: CONTAINERD_ADDRESS
+              value: /run/k3s/containerd/containerd.sock
+            - name: CONTAINERD_NAMESPACE
+              value: k8s.io
           volumeMounts:
-            - name: docker-sock
-              mountPath: /var/run/docker.sock
+            - name: containerd-sock
+              mountPath: /run/k3s/containerd/containerd.sock
           resources:
             requests:
               cpu: 200m

@@ -20,21 +20,19 @@ jobs:
           ref: ${{ github.event.client_payload.sha }}
           token: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Configure Docker for insecure Zot registry
+      - name: Install nerdctl
         run: |
-          mkdir -p /etc/docker
-          cat > /etc/docker/daemon.json <<'EOF'
-          {"insecure-registries": ["private-zot.registry.svc.cluster.local:5000"]}
-          EOF
-          pkill -HUP dockerd || true
+          NERDCTL_VERSION=$(curl -s https://api.github.com/repos/containerd/nerdctl/releases/latest | grep tag_name | cut -d'"' -f4 | tr -d v)
+          curl -fsSL "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-${NERDCTL_VERSION}-linux-arm64.tar.gz" \
+            | tar -xz -C /usr/local/bin nerdctl
 
       - name: Build and push image to Zot
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
-          docker build --platform linux/arm64 -t "${IMAGE}" .
-          docker push "${IMAGE}"
-          docker tag "${IMAGE}" "${{ env.REGISTRY }}/${{ env.APP }}:latest"
-          docker push "${{ env.REGISTRY }}/${{ env.APP }}:latest"
+          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" .
+          nerdctl --insecure-registry push "${IMAGE}"
+          nerdctl --insecure-registry tag "${IMAGE}" "${{ env.REGISTRY }}/${{ env.APP }}:latest"
+          nerdctl --insecure-registry push "${{ env.REGISTRY }}/${{ env.APP }}:latest"
 
       - name: Install kubectl
         run: |
