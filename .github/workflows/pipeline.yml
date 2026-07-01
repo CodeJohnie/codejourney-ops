@@ -49,9 +49,16 @@ jobs:
 
       - name: Build and push API image to Zot
         run: |
+          set -x
+          echo "--- buildkitd check ---"
+          buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers
+          echo "--- nerdctl info ---"
+          nerdctl info 2>&1 || true
+          echo "--- build context size ---"
+          du -sh apps/api/
           IMAGE="${{ env.REGISTRY }}/${{ env.API_APP }}:${{ github.event.client_payload.sha }}"
           LATEST="${{ env.REGISTRY }}/${{ env.API_APP }}:latest"
-          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" -t "${LATEST}" -f Dockerfile.api .
+          nerdctl --insecure-registry build --platform linux/arm64 -t "${IMAGE}" -t "${LATEST}" -f Dockerfile.api . 2>&1
           nerdctl --insecure-registry push "${IMAGE}"
           nerdctl --insecure-registry push "${LATEST}"
 
