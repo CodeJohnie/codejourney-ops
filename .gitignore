@@ -1,6 +1,8 @@
-# GitHub Actions runner binaries and runtime files
+# GitHub Actions runner runtime files (if ever re-extracted locally)
 runner/bin/
 runner/externals/
+runner/_diag/
+runner/_work/
 runner/*.tar.gz
 runner/.credentials
 runner/.credentials_rsaparams
