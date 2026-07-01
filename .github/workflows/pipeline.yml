@@ -1,14 +1,8 @@
 name: Deploy Pipeline
 
 on:
-  workflow_call:
-    inputs:
-      sha:
-        required: true
-        type: string
-    secrets:
-      GHCR_TOKEN:
-        required: true
+  repository_dispatch:
+    types: [deploy]
 
 env:
   REGISTRY: private-zot.registry.svc.cluster.local:5000
@@ -23,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: CodeJohnie/CodeJourney
-          ref: ${{ inputs.sha }}
+          ref: ${{ github.event.client_payload.sha }}
           token: ${{ secrets.GHCR_TOKEN }}
 
       - name: Configure Docker for insecure Zot registry
@@ -36,7 +30,7 @@ jobs:
 
       - name: Build and push image to Zot
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ inputs.sha }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
           docker build --platform linux/arm64 -t "${IMAGE}" .
           docker push "${IMAGE}"
           docker tag "${IMAGE}" "${{ env.REGISTRY }}/${{ env.APP }}:latest"
@@ -56,7 +50,7 @@ jobs:
 
       - name: Substitute image and apply manifests
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ inputs.sha }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
           if kubectl get deployment ${{ env.APP }} -n dev-testing &>/dev/null; then
             kubectl set image deployment/${{ env.APP }} ${{ env.APP }}="${IMAGE}" -n dev-testing
           else
