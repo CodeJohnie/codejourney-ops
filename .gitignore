@@ -1,0 +1,16 @@
+# GitHub Actions runner binaries and runtime files
+runner/bin/
+runner/externals/
+runner/*.tar.gz
+runner/.credentials
+runner/.credentials_rsaparams
+runner/.path
+runner/.runner
+runner/config.sh
+runner/env.sh
+runner/run.sh
+runner/run-helper.cmd.template
+runner/run-helper.sh
+runner/run-helper.sh.template
+runner/safe_sleep.sh
+runner/svc.sh
