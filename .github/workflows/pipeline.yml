@@ -12,11 +12,7 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: self-hosted
-
-    permissions:
-      contents: read
-      packages: write
+    runs-on: [self-hosted, k3s]
 
     steps:
       - name: Checkout CodeJourney source
@@ -36,7 +32,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          driver: docker   # use local daemon — avoids BuildKit cache complexity on self-hosted
+          driver: docker
 
       - name: Build and push image
         uses: docker/build-push-action@v5
@@ -47,6 +43,11 @@ jobs:
             ghcr.io/codejohnie/codejourney:${{ inputs.sha }}
             ghcr.io/codejohnie/codejourney:latest
 
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl"
+          chmod +x kubectl && mv kubectl /usr/local/bin/kubectl
+
       - name: Checkout ops repo (for k8s manifests)
         uses: actions/checkout@v4
         with:
@@ -54,7 +55,7 @@ jobs:
           token: ${{ secrets.GHCR_TOKEN }}
           path: ops
 
-      - name: Substitute image placeholder and apply manifests
+      - name: Substitute image and apply manifests
         run: |
           IMAGE="ghcr.io/codejohnie/codejourney:${{ inputs.sha }}"
           sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml > /tmp/deployment-patched.yaml

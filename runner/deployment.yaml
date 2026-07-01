@@ -14,14 +14,10 @@ spec:
         app: github-runner
     spec:
       serviceAccountName: github-runner
-      # Mount the host Docker socket so the runner can build images
       volumes:
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock
-        - name: kubeconfig
-          secret:
-            secretName: runner-kubeconfig
       containers:
         - name: runner
           image: myoung34/github-runner:latest
@@ -43,14 +39,9 @@ spec:
               value: "false"
             - name: DISABLE_AUTO_UPDATE
               value: "true"
-            - name: KUBECONFIG
-              value: /home/runner/.kube/config
           volumeMounts:
             - name: docker-sock
               mountPath: /var/run/docker.sock
-            - name: kubeconfig
-              mountPath: /home/runner/.kube
-              readOnly: true
           resources:
             requests:
               cpu: 200m
@@ -58,10 +49,3 @@ spec:
             limits:
               cpu: 1000m
               memory: 1Gi
----
-# Secrets — apply manually with your actual values (see README)
-# kubectl create secret generic runner-secrets -n ci \
-#   --from-literal=RUNNER_TOKEN=<your-runner-token>
-#
-# kubectl create secret generic runner-kubeconfig -n ci \
-#   --from-file=config=<path-to-kubeconfig>
