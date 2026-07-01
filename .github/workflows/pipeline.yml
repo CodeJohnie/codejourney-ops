@@ -10,6 +10,10 @@ on:
       GHCR_TOKEN:
         required: true
 
+env:
+  REGISTRY: private-zot.registry.svc.cluster.local:5000
+  APP: codejourney
+
 jobs:
   build-and-deploy:
     runs-on: [self-hosted, k3s]
@@ -22,26 +26,21 @@ jobs:
           ref: ${{ inputs.sha }}
           token: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: CodeJohnie
-          password: ${{ secrets.GHCR_TOKEN }}
+      - name: Configure Docker for insecure Zot registry
+        run: |
+          mkdir -p /etc/docker
+          cat > /etc/docker/daemon.json <<'EOF'
+          {"insecure-registries": ["private-zot.registry.svc.cluster.local:5000"]}
+          EOF
+          pkill -HUP dockerd || true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker
-
-      - name: Build and push image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/codejohnie/codejourney:${{ inputs.sha }}
-            ghcr.io/codejohnie/codejourney:latest
+      - name: Build and push image to Zot
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ inputs.sha }}"
+          docker build --platform linux/arm64 -t "${IMAGE}" .
+          docker push "${IMAGE}"
+          docker tag "${IMAGE}" "${{ env.REGISTRY }}/${{ env.APP }}:latest"
+          docker push "${{ env.REGISTRY }}/${{ env.APP }}:latest"
 
       - name: Install kubectl
         run: |
@@ -57,12 +56,10 @@ jobs:
 
       - name: Substitute image and apply manifests
         run: |
-          IMAGE="ghcr.io/codejohnie/codejourney:${{ inputs.sha }}"
-          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml > /tmp/deployment-patched.yaml
-          kubectl apply -f ops/k8s/namespace.yaml
-          kubectl apply -f ops/k8s/sealed-secret.yaml
-          kubectl apply -f /tmp/deployment-patched.yaml
-          kubectl apply -f ops/k8s/service.yaml
-          kubectl apply -f ops/k8s/ingress-tailscale.yaml
-          kubectl apply -f ops/k8s/tailscale-proxy.yaml
-          kubectl rollout status deployment/codejourney -n dev-testing --timeout=120s
+          IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ inputs.sha }}"
+          if kubectl get deployment ${{ env.APP }} -n dev-testing &>/dev/null; then
+            kubectl set image deployment/${{ env.APP }} ${{ env.APP }}="${IMAGE}" -n dev-testing
+          else
+            sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml | kubectl apply -f -
+          fi
+          kubectl rollout status deployment/${{ env.APP }} -n dev-testing --timeout=120s
