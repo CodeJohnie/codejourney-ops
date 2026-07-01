@@ -14,7 +14,6 @@ spec:
         app: github-runner
     spec:
       serviceAccountName: github-runner
-      # Pin to master node — containerd socket path is consistent here
       nodeSelector:
         kubernetes.io/hostname: rpi-master
       volumes:
@@ -22,7 +21,26 @@ spec:
           hostPath:
             path: /run/k3s/containerd/containerd.sock
             type: Socket
+        - name: buildkit-sock
+          emptyDir: {}
+      initContainers:
+        # Wait for buildkitd to be ready before the runner starts
+        - name: wait-for-buildkit
+          image: moby/buildkit:master
+          command: ["sh", "-c", "until buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers 2>/dev/null; do sleep 2; done"]
+          volumeMounts:
+            - name: buildkit-sock
+              mountPath: /run/buildkit
       containers:
+        - name: buildkitd
+          image: moby/buildkit:master
+          args: ["--addr", "unix:///run/buildkit/buildkitd.sock"]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: buildkit-sock
+              mountPath: /run/buildkit
+
         - name: runner
           image: myoung34/github-runner:latest
           env:
@@ -43,6 +61,8 @@ spec:
               value: "false"
             - name: DISABLE_AUTO_UPDATE
               value: "true"
+            - name: BUILDKIT_HOST
+              value: unix:///run/buildkit/buildkitd.sock
             - name: CONTAINERD_ADDRESS
               value: /run/k3s/containerd/containerd.sock
             - name: CONTAINERD_NAMESPACE
@@ -50,10 +70,12 @@ spec:
           volumeMounts:
             - name: containerd-sock
               mountPath: /run/k3s/containerd/containerd.sock
+            - name: buildkit-sock
+              mountPath: /run/buildkit
           resources:
             requests:
               cpu: 200m
               memory: 512Mi
             limits:
-              cpu: 1000m
-              memory: 1Gi
+              cpu: 1500m
+              memory: 2Gi
