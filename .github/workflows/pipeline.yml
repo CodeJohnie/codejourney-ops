@@ -80,7 +80,7 @@ jobs:
           else
             sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml | kubectl apply -f -
           fi
-          kubectl rollout status deployment/${{ env.APP }} -n dev-testing --timeout=120s
+          kubectl rollout status deployment/${{ env.APP }} -n dev-testing --timeout=300s
 
       - name: Deploy API
         run: |
@@ -90,4 +90,4 @@ jobs:
           else
             sed "s|API_IMAGE_PLACEHOLDER|${API_IMAGE}|g" ops/k8s/api-deployment.yaml | kubectl apply -f -
           fi
-          kubectl rollout status deployment/${{ env.API_APP }} -n dev-testing --timeout=120s
+          kubectl rollout status deployment/${{ env.API_APP }} -n dev-testing --timeout=300s
