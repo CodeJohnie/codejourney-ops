@@ -29,17 +29,21 @@ roleRef:
   name: tailscale
   apiGroup: rbac.authorization.k8s.io
 ---
+# Deployment (not StatefulSet): tailscale state lives in the "tailscale"
+# Secret (TS_KUBE_SECRET), so no PVC is needed. Recreate strategy prevents
+# two tailscaled instances fighting over the same state secret.
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: tailscale-proxy
   namespace: dev-testing
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: tailscale-proxy
-  serviceName: tailscale-proxy
   template:
     metadata:
       labels:
@@ -63,6 +67,8 @@ spec:
                   key: TS_AUTHKEY
             - name: TS_HOSTNAME
               value: codejourney
+            - name: TS_KUBE_SECRET
+              value: tailscale
             - name: TS_STATE_DIR
               value: /var/lib/tailscale
             - name: TS_USERSPACE
@@ -82,15 +88,8 @@ spec:
         - name: serve-config
           configMap:
             name: tailscale-serve-config
-  volumeClaimTemplates:
-    - metadata:
-        name: tailscale-state
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        storageClassName: longhorn
-        resources:
-          requests:
-            storage: 100Mi
+        - name: tailscale-state
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: ConfigMap
