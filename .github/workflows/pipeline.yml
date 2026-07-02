@@ -75,19 +75,13 @@ jobs:
       - name: Deploy web app
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ env.APP }}:${{ github.event.client_payload.sha }}"
-          if kubectl get deployment ${{ env.APP }} -n dev-testing &>/dev/null; then
-            kubectl set image deployment/${{ env.APP }} ${{ env.APP }}="${IMAGE}" -n dev-testing
-          else
-            sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml | kubectl apply -f -
-          fi
+          # Always apply the rendered manifest so image AND manifest changes
+          # (probes, env vars, resources) reach the cluster together.
+          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" ops/k8s/deployment.yaml | kubectl apply -f -
           kubectl rollout status deployment/${{ env.APP }} -n dev-testing --timeout=300s
 
       - name: Deploy API
         run: |
           API_IMAGE="${{ env.REGISTRY }}/${{ env.API_APP }}:${{ github.event.client_payload.sha }}"
-          if kubectl get deployment ${{ env.API_APP }} -n dev-testing &>/dev/null; then
-            kubectl set image deployment/${{ env.API_APP }} ${{ env.API_APP }}="${API_IMAGE}" -n dev-testing
-          else
-            sed "s|API_IMAGE_PLACEHOLDER|${API_IMAGE}|g" ops/k8s/api-deployment.yaml | kubectl apply -f -
-          fi
+          sed "s|API_IMAGE_PLACEHOLDER|${API_IMAGE}|g" ops/k8s/api-deployment.yaml | kubectl apply -f -
           kubectl rollout status deployment/${{ env.API_APP }} -n dev-testing --timeout=300s
