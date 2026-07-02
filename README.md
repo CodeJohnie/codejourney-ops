@@ -8,16 +8,52 @@ CI/CD pipeline and Kubernetes manifests for the [CodeJourney](https://github.com
 
 ## How it works
 
+There are two ways to deploy — CI for permanent deploys, and a local script for fast iteration.
+
+### CI path (permanent)
+
 ```
 push to main (CodeJourney repo)
   → .github/workflows/deploy.yml  (dispatch trigger)
-    → this repo's pipeline.yml    (runs on self-hosted runner)
-      → nerdctl + buildkitd build web image  → Zot registry
-      → nerdctl + buildkitd build API image  → Zot registry
+    → this repo's pipeline.yml    (runs on self-hosted runner, ~30 min)
+      → nerdctl + buildkitd build web image  → Zot registry (tag = commit sha)
+      → nerdctl + buildkitd build API image  → Zot registry (tag = commit sha)
       → kubectl apply postgres, redis         (idempotent)
-      → kubectl set image deployment/codejourney
-      → kubectl set image deployment/codejourney-api
+      → kubectl apply k8s/deployment.yaml     (image rendered in via sed)
+      → kubectl apply k8s/api-deployment.yaml (image rendered in via sed)
 ```
+
+The pipeline **applies the full manifests** on every deploy, so changes to
+probes, env vars, or resources in `k8s/*.yaml` reach the cluster
+automatically — no manual `kubectl apply` needed.
+
+### Local path (fast iteration)
+
+`deploy.sh` in the CodeJourney repo builds images from your **current
+working tree** (nothing needs to be committed) and deploys them directly,
+bypassing CI. Native arm64 build on a Mac takes ~5 minutes vs ~30 via CI.
+
+```bash
+cd ~/CodeJourney
+./deploy.sh          # web only (default)
+./deploy.sh api      # API only
+./deploy.sh all      # both
+```
+
+What it does: `podman build` from the working tree → push to Zot tagged
+`local-<timestamp>` → `kubectl set image` → wait for rollout.
+
+Prerequisites:
+- **podman** with a running machine (`podman machine start`)
+- **kubectl** and `~/.kube/config-codejourney` pointing at
+  `https://192.168.0.45:6443` (the master's LAN IP)
+- Same LAN as the cluster (the registry is `192.168.0.45:30080`)
+
+Caveats:
+- Local deploys are **temporary by design**: the next push to `main`
+  rebuilds from committed code and overwrites the `local-*` image.
+- Unlike CI, the script only swaps the image — manifest changes in
+  `k8s/*.yaml` still deploy through the pipeline.
 
 ---
 
@@ -134,7 +170,7 @@ k8s/
   api-deployment.yaml   # NestJS API — API_IMAGE_PLACEHOLDER substituted at deploy time
   postgres.yaml         # PostgreSQL StatefulSet + headless service (Longhorn PVC)
   redis.yaml            # Redis StatefulSet + headless service (Longhorn PVC)
-  tailscale-proxy.yaml  # Tailscale proxy StatefulSet + RBAC (Longhorn PVC)
+  tailscale-proxy.yaml  # Tailscale proxy Deployment + RBAC (state in "tailscale" Secret)
   ingress-tailscale.yaml
   sealed-secret.yaml    # Encrypted web-app secrets (safe to commit)
   seal-api-secret.sh    # Script to generate and seal DB + API secrets
@@ -168,8 +204,16 @@ kubectl rollout restart deployment/github-runner -n ci
 | `codejourney-api` | Deployment (NestJS/GraphQL) | — |
 | `postgres` | StatefulSet | 5Gi Longhorn PVC |
 | `redis` | StatefulSet | 1Gi Longhorn PVC |
-| `tailscale-proxy` | StatefulSet | 100Mi Longhorn PVC |
+| `tailscale-proxy` | Deployment | state in `tailscale` Secret (no PVC) |
 
-**Tailscale hostnames:**
-- Web: `codejourney.tail9d71dd.ts.net`
-- API: `codejourney-api.tail9d71dd.ts.net`
+**Access:**
+- Web: `https://codejourney.tail9d71dd.ts.net` (via tailscale-proxy)
+- API: cluster-internal only (`codejourney-api.dev-testing.svc.cluster.local:4000`).
+  Browsers reach it through the web app's same-origin `/api/graphql` proxy
+  route, which forwards to the API service — so the API needs no public
+  hostname and no CORS config.
+
+**Why the tailscale-proxy has no PVC:** tailscale's containerboot stores its
+real state (machine key, TLS certs, device identity) in the `tailscale`
+Kubernetes Secret (`TS_KUBE_SECRET`). The old Longhorn PVC only ever held
+logs, and its volume faulting caused Longhorn to repeatedly delete the pod.
