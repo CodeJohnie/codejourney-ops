@@ -24,7 +24,11 @@ spec:
       containers:
         - name: buildkitd
           image: moby/buildkit:master
-          args: ["--addr", "unix:///run/buildkit/buildkitd.sock"]
+          args:
+            - "--addr"
+            - "unix:///run/buildkit/buildkitd.sock"
+            - "--oci-worker-gc-keepstorage"
+            - "10240"
           securityContext:
             privileged: true
           volumeMounts:
