@@ -31,7 +31,10 @@ jobs:
       - name: Checkout CodeJourney source
         uses: actions/checkout@v4
         with:
-          repository: CodeJohnie/CodeJourney
+          # Renamed from CodeJohnie. GitHub's redirect kept the old path
+          # working, which is why this never broke — but a redirect only lasts
+          # until someone claims the abandoned name.
+          repository: J4yM1l/CodeJourney
           # Build the exact commit that was dispatched, NOT whatever main
           # happens to be now. The images below are tagged with this sha, so
           # checking out a moving ref made the tag a lie whenever a second
@@ -79,7 +82,7 @@ jobs:
       - name: Checkout ops repo (for k8s manifests)
         uses: actions/checkout@v4
         with:
-          repository: CodeJohnie/codejourney-ops
+          repository: J4yM1l/codejourney-ops
           token: ${{ secrets.GHCR_TOKEN }}
           path: ops
 
