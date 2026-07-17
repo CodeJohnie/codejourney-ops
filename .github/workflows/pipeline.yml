@@ -16,11 +16,27 @@ jobs:
     runs-on: [self-hosted, k3s]
 
     steps:
+      # An empty ref makes actions/checkout silently fall back to the default
+      # branch — which is precisely the bug below, reappearing quietly. Refuse
+      # to deploy rather than build something nobody asked for.
+      - name: Validate the requested commit
+        run: |
+          SHA="${{ github.event.client_payload.sha }}"
+          if [ -z "${SHA}" ]; then
+            echo "::error::client_payload.sha is empty — refusing to deploy."
+            exit 1
+          fi
+          echo "Deploying CodeJourney @ ${SHA}"
+
       - name: Checkout CodeJourney source
         uses: actions/checkout@v4
         with:
           repository: CodeJohnie/CodeJourney
-          ref: main
+          # Build the exact commit that was dispatched, NOT whatever main
+          # happens to be now. The images below are tagged with this sha, so
+          # checking out a moving ref made the tag a lie whenever a second
+          # commit landed before this runner picked the job up.
+          ref: ${{ github.event.client_payload.sha }}
           token: ${{ secrets.GHCR_TOKEN }}
 
       - name: Install nerdctl and buildctl
